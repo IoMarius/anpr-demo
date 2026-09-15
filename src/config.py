@@ -15,6 +15,7 @@ class RecognitionSettings(BaseSettings):
     allowlist: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     no_read_confidence: float = 0.0
 
+
 # for paddle
 # class RecognitionSettings(BaseSettings):
 #     lang: str = "en"
@@ -40,20 +41,28 @@ class VideoSettings(BaseSettings):
 
 class VisualizationSettings(BaseSettings):
     track_box_color: tuple[int, int, int] = (0, 255, 0)
-    track_box_thickness: int = 2
-    label_offset: int = 10
-    label_font_scale: float = 0.5
+    track_box_thickness: int = 3
+    
     label_color: tuple[int, int, int] = (0, 255, 0)
-    label_thickness: int = 2
-    hud_left: int = 10
-    hud_start_y: int = 30
-    hud_font_scale: float = 0.7
+    label_font_scale: float = 1.2
+    label_thickness: int = 3
+    
+    plate_text_color: tuple[int, int, int] = (0, 255, 255)
+    plate_font_scale: float = 1.6
+    plate_thickness: int = 4
+    
+    hud_left: int = 15
+    hud_start_y: int = 45
+    hud_font_scale: float = 1.0
     hud_color: tuple[int, int, int] = (0, 0, 255)
-    hud_thickness: int = 2
-    hud_line_spacing: int = 30
+    hud_thickness: int = 3
+    hud_line_spacing: int = 40
 
-
-
+class DemoSettings(BaseSettings):
+    video_url: str = "../sample/highway-4k-h264.mp4"
+    camera_id: str = "DEMO-CAM-1"
+    host: str = "0.0.0.0"
+    port: int = 5000
 
 class Settings(BaseSettings):    
     detection: DetectionSettings = DetectionSettings()
@@ -62,6 +71,7 @@ class Settings(BaseSettings):
     tracking: TrackingSettings = TrackingSettings()
     video: VideoSettings = VideoSettings()
     visualization: VisualizationSettings = VisualizationSettings()
+    demo: DemoSettings = DemoSettings()
 
 
 settings = Settings()

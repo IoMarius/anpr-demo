@@ -10,6 +10,7 @@ from fusion.plate_fusion import PlateFusion
 from events.models import PlateEvent
 from visualization.renderer import HUD
 from metrics import PipelineMetrics
+from config import settings
 import threading
 from flask import Flask, Response
 
@@ -40,15 +41,16 @@ def generate_frames():
 @app.route('/')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
+    
 def start_server():
-    # host='0.0.0.0' exposes the stream to your network
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    HOST = settings.demo.host
+    PORT = settings.demo.port
+    app.run(host=HOST, port=PORT, debug=False, use_reloader=False)
 
 def main():
     # Configuration
-    VIDEO_URL = "../sample/highway-4k-h264.mp4"
-    CAMERA_ID = "demo-camera-1"
+    VIDEO_URL = settings.demo.video_url
+    CAMERA_ID = settings.demo.camera_id
     
     # Initialize components
     print("Initializing pipeline components...")
