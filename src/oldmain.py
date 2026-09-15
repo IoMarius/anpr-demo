@@ -10,40 +10,6 @@ from fusion.plate_fusion import PlateFusion
 from events.models import PlateEvent
 from visualization.renderer import HUD
 from metrics import PipelineMetrics
-import threading
-from flask import Flask, Response
-
-app = Flask(__name__)
-latest_frame = None
-frame_lock = threading.Lock()
-
-def generate_frames():
-    global latest_frame
-    while True:
-        with frame_lock:
-            if latest_frame is None:
-                time.sleep(0.1) # Prevent thrashing before video starts
-                continue
-            
-            # Compress the frame to JPEG for the browser
-            ret, buffer = cv2.imencode('.jpg', latest_frame)
-            
-        if not ret:
-            continue
-            
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-               
-        time.sleep(0.03) # Limit stream to ~30 FPS
-
-@app.route('/')
-def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-def start_server():
-    # host='0.0.0.0' exposes the stream to your network
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 def main():
     # Configuration
@@ -61,9 +27,6 @@ def main():
     fusion = PlateFusion()
     metrics = PipelineMetrics()
 
-    server_thread = threading.Thread(target=start_server, daemon=True)
-    server_thread.start()
-    print("Video stream available at http://172.18.64.20:5000/")
     print("Pipeline started. Press 'q' to quit.")
     
     try:
@@ -126,17 +89,14 @@ def main():
 
             # 5. Visualization
             render_frame = HUD.draw(frame.copy(), active_tracks, metrics)
-            # cv2.imshow("ANPR Pipeline", render_frame)
+            cv2.imshow("ANPR Pipeline", render_frame)
             
-            global latest_frame
-            with frame_lock:
-                latest_frame = render_frame.copy()
-            # if cv2.waitKey(1) & 0xFF == ord('q'):
-            #     break
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
                 
     finally:
         source.stop()
-        # cv2.destroyAllWindows()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
