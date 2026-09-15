@@ -38,9 +38,10 @@ class TrackManager:
                 
         return current_frame_tracks
 
-    def add_plate_observation(self, track_id, text, confidence):
+    def add_plate_observation(self, track_id, text, confidence, bbox):
         if track_id in self.active_tracks:
             self.active_tracks[track_id].plate_observations.append({
                 "text": text,
-                "conf": confidence
+                "conf": confidence,
+                "bbox": bbox  # Save the coordinates here
             })

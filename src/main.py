@@ -96,11 +96,13 @@ def main():
                         
                         text, ocr_conf = ocr.recognize(plate_crop)
                         if text:
-                            tracker.add_plate_observation(track_id, text, ocr_conf)
+                            tracker.add_plate_observation(track_id, text, ocr_conf, p_bbox)
                             metrics.mark_recognition()
                             
                             # Draw plate box for visualization
-                            cv2.rectangle(frame, (px1, py1), (px2, py2), (255, 0, 0), 2)
+                            # Draw RED plate box instantly only on this specific frame
+                            cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 0, 255), 3)
+                            # cv2.rectangle(frame, (px1, py1), (px2, py2), (255, 0, 0), 2)
 
             # 4. Process Stale Tracks & Emit Events
             # Extract finished tracks from the tracker's internal state

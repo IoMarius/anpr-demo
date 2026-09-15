@@ -1,10 +1,11 @@
 from pydantic_settings import BaseSettings
 
-class DetectionSettings(BaseSettings):
+class DetectionSettings(BaseSettings):    
     vehicle_model: str = "models/yolov8n.pt"
     plate_model: str = "models/plate_yolov8n.pt"
     vehicle_class_ids: list[int] = [2, 3, 5, 7]
     confidence_threshold: float = 0.25
+    device: str = "cpu"
     verbose: bool = False
 
 

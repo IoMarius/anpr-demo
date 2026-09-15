@@ -8,8 +8,10 @@ class VehicleDetector:
         vehicle_classes: list[int] = settings.detection.vehicle_class_ids,
         conf_threshold: float = settings.detection.confidence_threshold,
         verbose: bool = settings.detection.verbose,
+        device: str = settings.detection.device
     ):
         self.model = YOLO(model_path)
+        self.device = device
         self.vehicle_classes = vehicle_classes
         self.conf_threshold = conf_threshold
         self.verbose = verbose
@@ -21,6 +23,7 @@ class VehicleDetector:
             conf=self.conf_threshold,
             persist=True,
             verbose=self.verbose,
+            device=self.device
         )
         vehicles = []
         for result in results:

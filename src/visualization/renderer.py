@@ -1,11 +1,8 @@
 import cv2
 
-
 class HUD:
-
     @staticmethod
     def draw(frame, current_tracks, all_tracks_state, metrics):
-
         for track_id, bbox in current_tracks:
             x1, y1, x2, y2 = bbox
 
@@ -21,7 +18,6 @@ class HUD:
 
             # Large ID
             id_text = f"ID: {track_id}"
-
             cv2.putText(
                 frame,
                 id_text,
@@ -33,7 +29,7 @@ class HUD:
                 cv2.LINE_AA
             )
 
-            # Large plate number
+            # Large plate number (Persistent Text)
             if state and state.plate_observations:
                 plate_text = state.plate_observations[-1]["text"]
 
@@ -50,7 +46,6 @@ class HUD:
 
         # Metrics HUD
         fps = metrics.get_fps()
-
         hud_text = [
             f"FPS: {fps:.1f}",
             f"Active Tracks: {metrics.active_tracks}",
@@ -58,7 +53,6 @@ class HUD:
         ]
 
         y_offset = 45
-
         for text in hud_text:
             cv2.putText(
                 frame,
@@ -70,7 +64,6 @@ class HUD:
                 3,
                 cv2.LINE_AA,
             )
-
             y_offset += 40
 
         return frame
