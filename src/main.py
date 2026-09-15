@@ -47,15 +47,15 @@ def start_server():
 
 def main():
     # Configuration
-    VIDEO_URL = "../sample/highway-4k.mp4"
+    VIDEO_URL = "../sample/highway-4k-h264.mp4"
     CAMERA_ID = "demo-camera-1"
     
     # Initialize components
     print("Initializing pipeline components...")
     source = VideoSource(VIDEO_URL)
-    vehicle_det = VehicleDetector("yolov8n.pt")
-    plate_det = PlateDetector("plate_yolov8n.pt")
-    tracker = TrackManager(stale_timeout=2.0)
+    vehicle_det = VehicleDetector()
+    plate_det = PlateDetector()
+    tracker = TrackManager()
     gate = QualityGate()
     ocr = PlateRecognizer()
     fusion = PlateFusion()
@@ -124,8 +124,8 @@ def main():
                 
                 del tracker.active_tracks[tid]
 
-            # 5. Visualization
-            render_frame = HUD.draw(frame.copy(), active_tracks, metrics)
+            # 5. Visualization            
+            render_frame = HUD.draw(frame.copy(), active_tracks, tracker.active_tracks, metrics)
             # cv2.imshow("ANPR Pipeline", render_frame)
             
             global latest_frame

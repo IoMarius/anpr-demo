@@ -14,6 +14,13 @@ class RecognitionSettings(BaseSettings):
     allowlist: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     no_read_confidence: float = 0.0
 
+# for paddle
+# class RecognitionSettings(BaseSettings):
+#     lang: str = "en"
+#     gpu: bool = True
+#     allowlist: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+#     no_read_confidence: float = 0.0
+#     show_log: bool = False
 
 class QualitySettings(BaseSettings):
     min_width: int = 80
@@ -24,8 +31,6 @@ class QualitySettings(BaseSettings):
 
 class TrackingSettings(BaseSettings):
     stale_timeout: float = 2.0
-    mock_id_space: int = 1000
-
 
 class VideoSettings(BaseSettings):
     queue_size: int = 30

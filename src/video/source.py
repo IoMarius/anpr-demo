@@ -1,6 +1,7 @@
 import cv2
 import threading
 import queue
+import time
 
 from config import settings
 
@@ -21,19 +22,15 @@ class VideoSource:
 
     def _update(self):
         while not self.stopped:
-            grabbed, frame = self.stream.read()
-            if not grabbed:
-                self.stop()
-                return
-            
-            # If full, dump the oldest frame to catch up to real-time
-            if self.Q.full():
-                try:
-                    self.Q.get_nowait()
-                except queue.Empty:
-                    pass
-                    
-            self.Q.put(frame)
+            if not self.Q.full():
+                grabbed, frame = self.stream.read()
+                if not grabbed:
+                    # Rewind to frame 0 for continuous looping
+                    self.stream.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
+                self.Q.put(frame)
+            else:
+                time.sleep(0.01)
 
     def read(self):
         return self.Q.get()
