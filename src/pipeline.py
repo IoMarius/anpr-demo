@@ -114,7 +114,7 @@ class ANPRPipeline:
                 if self.gate.is_valid(p_bbox, p_conf, np_frame):
                     ocr_jobs.append((track_id, p_bbox, p_conf))
                 else:
-                    self.metrics.mark_gate_filtered()
+                    self.metrics.mark_gate_reject(self.gate.last_reason)
         finally:
             self.metrics.stop("quality_gate")
 

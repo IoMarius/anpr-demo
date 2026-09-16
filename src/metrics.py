@@ -32,6 +32,10 @@ class PipelineMetrics:
         self.vehicle_skipped = 0
         self.plate_gate_filtered = 0
         self.ocr_rejected_low_conf = 0
+        self.gate_reject_conf = 0
+        self.gate_reject_size = 0
+        self.gate_reject_aspect = 0
+        self.gate_reject_blur = 0
         self._frame_plate_calls = 0
         self._frame_ocr_calls = 0
 
@@ -73,6 +77,17 @@ class PipelineMetrics:
 
     def mark_gate_filtered(self, n: int = 1):
         self.plate_gate_filtered += n
+
+    def mark_gate_reject(self, reason: str, n: int = 1):
+        self.plate_gate_filtered += n
+        if reason == "conf":
+            self.gate_reject_conf += n
+        elif reason == "size":
+            self.gate_reject_size += n
+        elif reason == "aspect":
+            self.gate_reject_aspect += n
+        elif reason == "blur":
+            self.gate_reject_blur += n
 
     def mark_ocr_rejected(self, n: int = 1):
         self.ocr_rejected_low_conf += n
@@ -124,5 +139,7 @@ class PipelineMetrics:
             f"  vehicle calls={self.vehicle_calls} skipped={self.vehicle_skipped} "
             f"per_call={self._avg_ms_per_call('vehicle_detection', self.vehicle_calls):.0f}ms\n"
             f"  gate_filtered={self.plate_gate_filtered} "
+            f"(conf={self.gate_reject_conf} size={self.gate_reject_size} "
+            f"aspect={self.gate_reject_aspect} blur={self.gate_reject_blur}) "
             f"ocr_rejected_low_conf={self.ocr_rejected_low_conf}"
         )

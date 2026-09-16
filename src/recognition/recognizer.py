@@ -11,7 +11,10 @@ class PlateRecognizer:
                   no_read_confidence: float = settings.recognition.no_read_confidence,
                    use_detector: bool = settings.recognition.easyocr_detector,
                    quantize: bool = settings.recognition.quantize,
-                   min_ocr_conf: float = settings.recognition.min_ocr_conf):
+                   min_ocr_conf: float = settings.recognition.min_ocr_conf,
+                   upscale_target: int = settings.recognition.upscale_target,
+                   upscale_max_factor: float = settings.recognition.upscale_max_factor,
+                   sharpen: bool = settings.recognition.sharpen):
         # Initialize EasyOCR, restricting to alphanumeric characters
         use_gpu = gpu and settings.gpu.enabled
         if use_gpu and not touch_cuda("cuda:0"):
@@ -22,6 +25,9 @@ class PlateRecognizer:
         self.allowlist = allowlist
         self.no_read_confidence = no_read_confidence
         self.min_ocr_conf = min_ocr_conf
+        self.upscale_target = upscale_target
+        self.upscale_max_factor = upscale_max_factor
+        self.sharpen = sharpen
         self.use_detector = use_detector and hasattr(self.reader,
                                                      "get_textbox")
         log_gpu_status(f"recognizer gpu={self.use_gpu} "
@@ -41,13 +47,28 @@ class PlateRecognizer:
                                       quantize=quantize)
             raise
 
-    def recognize(self, plate_crop):
-        # Upscale small crops: EasyOCR was trained on larger text;
-        # 2x cubic is ~0.1ms and lifts tiny-plate recall.
+    def _preprocess(self, plate_crop):
+        # Adaptive upscale: far-camera plates can be ~40px wide while
+        # EasyOCR resizes text lines to 64px height internally. Scale the
+        # longest side toward the target (capped) so cubic interpolation
+        # reconstructs stroke edges before recognition.
         h, w = plate_crop.shape[0], plate_crop.shape[1]
-        if max(h, w) < 200:
-            plate_crop = cv2.resize(plate_crop, (w * 2, h * 2),
-                                    interpolation=cv2.INTER_CUBIC)
+        if max(h, w) < self.upscale_target:
+            factor = min(self.upscale_target / max(h, w),
+                         self.upscale_max_factor)
+            if factor > 1.0:
+                plate_crop = cv2.resize(
+                    plate_crop, (int(w * factor), int(h * factor)),
+                    interpolation=cv2.INTER_CUBIC)
+        if self.sharpen:
+            # Mild unsharp mask against motion blur; reverted via config
+            # if it ever amplifies sensor noise on tiny crops.
+            blurred = cv2.GaussianBlur(plate_crop, (0, 0), 3)
+            plate_crop = cv2.addWeighted(plate_crop, 1.5, blurred, -0.5, 0)
+        return plate_crop
+
+    def recognize(self, plate_crop):
+        plate_crop = self._preprocess(plate_crop)
         if self.use_detector:
             results = self.reader.readtext(plate_crop,
                                            allowlist=self.allowlist)

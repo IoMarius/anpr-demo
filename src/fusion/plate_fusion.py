@@ -5,6 +5,7 @@ from config import settings
 
 MIN_OBS_CONF = settings.recognition.min_ocr_conf
 SINGLE_OBS_CONF = settings.recognition.stop_confidence
+MIN_PLATE_LENGTH = settings.recognition.min_plate_length
 
 class PlateFusion:
     @staticmethod
@@ -14,7 +15,8 @@ class PlateFusion:
 
         # 0. Drop low-confidence reads so one junk OCR cannot seed an event
         confident = [obs for obs in observations
-                     if float(obs.get("conf", 0.0)) >= MIN_OBS_CONF]
+                     if float(obs.get("conf", 0.0)) >= MIN_OBS_CONF
+                     and len(obs.get("text", "")) >= MIN_PLATE_LENGTH]
         if not confident:
             return None, 0.0
 
