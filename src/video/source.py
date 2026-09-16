@@ -7,7 +7,8 @@ import torch
 
 from config import settings
 from video.frames import CPUFrame, GPUFrame
-from video.gstreamer import build_nvdec_pipeline, probe_report
+from video.gstreamer import (build_nvdec_pipeline, probe_report, probe_codec,
+                             apply_ffmpeg_hwaccel)
 from utils.device import resolve_device
 
 
@@ -17,7 +18,8 @@ class VideoSource:
                  hardware_decode: bool = settings.video.hardware_decode,
                  gpu_frames: bool = settings.video.gpu_frames,
                  mode: str = settings.video.mode,
-                 device: str = settings.detection.device):
+                 device: str = settings.detection.device,
+                 max_failures: int = settings.video.max_decode_failures):
         self.source_path = source_path
         self.mode = mode
         self.join_timeout = join_timeout
@@ -28,6 +30,9 @@ class VideoSource:
         self.backend = "cpu-ffmpeg"
         self.frames_decoded = 0
         self.frames_dropped = 0
+        self.max_failures = max_failures
+        self._consec_failures = 0
+        self.error: str | None = None
 
         self.stream = self._open(source_path, hardware_decode)
         self.stopped = False
@@ -38,19 +43,36 @@ class VideoSource:
         self.thread.start()
 
     def _open(self, source_path: str, hardware_decode: bool):
+        self.codec = probe_codec(source_path)
         if hardware_decode:
-            print(probe_report(hardware_decode))
-            pipeline, decoder = build_nvdec_pipeline(source_path)
-            print(f"[NVDEC] trying GStreamer pipeline with {decoder}")
-            stream = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-            if stream.isOpened():
-                self.backend = f"gstreamer-{decoder}"
-                print(f"[NVDEC] using hardware decoder: {decoder}")
+            print(probe_report(hardware_decode) + f" codec={self.codec}")
+            pipeline, decoder = build_nvdec_pipeline(
+                source_path, codec=self.codec)
+            if pipeline is not None:
+                print(f"[NVDEC] trying GStreamer pipeline with {decoder} "
+                      f"for {self.codec}")
+                stream = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+                if stream.isOpened():
+                    self.backend = f"gstreamer-{decoder}({self.codec})"
+                    print(f"[NVDEC] using hardware decoder: {decoder}")
+                    return stream
+                print("[NVDEC] GStreamer NVDEC open failed, "
+                      "trying FFmpeg HW acceleration")
+            else:
+                print(f"[NVDEC] no GStreamer decoder plugin for {self.codec}, "
+                      "trying FFmpeg HW acceleration")
+            stream = cv2.VideoCapture(source_path, cv2.CAP_FFMPEG)
+            if stream.isOpened() and apply_ffmpeg_hwaccel(stream):
+                self.backend = f"ffmpeg-hwaccel({self.codec})"
+                print(f"[NVDEC] FFmpeg HW acceleration requested "
+                      f"for {self.codec} (verify with nvidia-smi dmon)")
                 return stream
-            print("[NVDEC] GStreamer NVDEC open failed, falling back to CPU decode")
+            print("[NVDEC] FFmpeg HW acceleration unavailable, "
+                  "falling back to CPU decode")
         stream = cv2.VideoCapture(source_path)
         if not stream.isOpened():
             raise ValueError(f"Failed to open video source: {source_path}")
+        self.backend = f"cpu-ffmpeg({self.codec})"
         return stream
 
     def _wrap(self, frame, frame_id: int):
@@ -70,11 +92,25 @@ class VideoSource:
             if not self.Q.full():
                 grabbed, frame = self.stream.read()
                 if not grabbed:
+                    self._consec_failures += 1
+                    if self._consec_failures >= self.max_failures:
+                        self.error = (
+                            f"decoder produced no frames "
+                            f"{self.max_failures}x in a row "
+                            f"(backend={self.backend} codec={self.codec} "
+                            f"source={self.source_path}). "
+                            f"For AV1 without NVDEC support, transcode to "
+                            f"H264 or enable hardware_decode on NVDEC-AV1 "
+                            f"hardware.")
+                        print(f"[VIDEO] FATAL {self.error}")
+                        self.stopped = True
+                        return
                     if self.mode == "live":
                         time.sleep(0.01)
                         continue
                     self.stream.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
+                self._consec_failures = 0
                 self.frames_decoded += 1
                 item = self._wrap(frame, self.frames_decoded)
                 try:

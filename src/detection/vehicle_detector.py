@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 import torch
 from config import settings
-from utils.device import resolve_device, log_gpu_status
+from utils.device import resolve_device, log_gpu_status, touch_cuda
 from utils.gpu_preprocess import letterbox_gpu, unscale_boxes
 from video.frames import GPUFrame, CPUFrame
 
@@ -21,6 +21,8 @@ class VehicleDetector:
     ):
         self.model = YOLO(model_path)
         self.device = resolve_device(device, settings.gpu.enabled)
+        if self.device.startswith("cuda") and not touch_cuda(self.device):
+            self.device = "cpu"
         # Phase 18: FP16 only where CUDA actually runs; CPU stays FP32 with
         # no extra kwargs (avoids deprecated-flag warnings on CPU boxes).
         self.half = (settings.gpu.fp16 and torch.cuda.is_available()

@@ -1,19 +1,40 @@
 import easyocr
 
 from config import settings
-from utils.device import log_gpu_status
+from utils.device import log_gpu_status, is_cuda_oom, touch_cuda
 
 class PlateRecognizer:
     def __init__(self, languages: list[str] = settings.recognition.languages,
-                 gpu: bool = settings.recognition.gpu,
-                 allowlist: str = settings.recognition.allowlist,
-                 no_read_confidence: float = settings.recognition.no_read_confidence):
+                  gpu: bool = settings.recognition.gpu,
+                  allowlist: str = settings.recognition.allowlist,
+                  no_read_confidence: float = settings.recognition.no_read_confidence,
+                  use_detector: bool = settings.recognition.easyocr_detector,
+                  quantize: bool = settings.recognition.quantize):
         # Initialize EasyOCR, restricting to alphanumeric characters
         use_gpu = gpu and settings.gpu.enabled
-        self.reader = easyocr.Reader(languages, gpu=use_gpu)
-        self.use_gpu = use_gpu
+        if use_gpu and not touch_cuda("cuda:0"):
+            use_gpu = False
+        self.reader = self._init_reader(languages, use_gpu,
+                                        use_detector, quantize)
+        self.use_gpu = self.reader.device == "cuda"
         self.allowlist = allowlist
         self.no_read_confidence = no_read_confidence
+        log_gpu_status(f"recognizer gpu={self.use_gpu} "
+                       f"detector={use_detector} quantize={quantize}")
+
+    @staticmethod
+    def _init_reader(languages, use_gpu, use_detector, quantize):
+        try:
+            return easyocr.Reader(languages, gpu=use_gpu,
+                                  detector=use_detector, quantize=quantize)
+        except Exception as e:
+            if use_gpu and is_cuda_oom(e):
+                print(f"[OCR] GPU init failed ({str(e)[:150]}), "
+                      f"falling back to CPU reader")
+                return easyocr.Reader(languages, gpu=False,
+                                      detector=use_detector,
+                                      quantize=quantize)
+            raise
 
     def recognize(self, plate_crop):
         results = self.reader.readtext(plate_crop, allowlist=self.allowlist)

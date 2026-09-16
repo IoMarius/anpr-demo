@@ -11,6 +11,7 @@ from pipeline import ANPRPipeline
 from metrics import PipelineMetrics
 from config import settings
 from utils.device import log_gpu_status
+from utils.preflight import preflight_report
 import threading
 from flask import Flask, Response
 
@@ -56,6 +57,7 @@ def main():
     
     # Initialize components
     print("Initializing pipeline components...")
+    print(preflight_report(VIDEO_URL))
     log_gpu_status("startup")
     print(f"[CONFIG] gpu.enabled={settings.gpu.enabled} device={settings.detection.device} "
           f"plate_interval={settings.detection.plate_interval} "
@@ -92,7 +94,9 @@ def main():
             global latest_frame
             with frame_lock:
                 latest_frame = render_frame.copy()
-                
+
+        if source.error:
+            raise RuntimeError(source.error)
     finally:
         source.stop()        
 

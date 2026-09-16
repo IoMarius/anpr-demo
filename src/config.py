@@ -27,6 +27,8 @@ class RecognitionSettings(BaseSettings):
     batch_size: int = 8
     min_quality_gain: float = 0.0
     stop_confidence: float = 0.0
+    easyocr_detector: bool = True
+    quantize: bool = False
 
 
 # for paddle
@@ -53,6 +55,7 @@ class VideoSettings(BaseSettings):
     hardware_decode: bool = False
     gpu_frames: bool = False
     mode: str = "offline"
+    max_decode_failures: int = 60
 
 
 class VisualizationSettings(BaseSettings):

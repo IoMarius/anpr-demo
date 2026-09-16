@@ -2,7 +2,7 @@ from ultralytics import YOLO
 import torch
 
 from config import settings
-from utils.device import resolve_device, log_gpu_status
+from utils.device import resolve_device, log_gpu_status, touch_cuda
 from utils.gpu_preprocess import letterbox_gpu, unscale_boxes
 
 class PlateDetector:
@@ -16,6 +16,8 @@ class PlateDetector:
         self.conf_threshold = conf_threshold
         self.verbose = verbose
         self.device = resolve_device(device, settings.gpu.enabled)
+        if self.device.startswith("cuda") and not touch_cuda(self.device):
+            self.device = "cpu"
         self.half = (settings.gpu.fp16 and torch.cuda.is_available()
                      and self.device.startswith("cuda"))
         self._precision = {"half": True} if self.half else {}
