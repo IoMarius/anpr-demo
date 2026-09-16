@@ -5,7 +5,8 @@ from fusion.plate_fusion import PlateFusion
 
 class HUD:
     @staticmethod
-    def draw(frame, current_tracks, all_tracks_state, metrics):
+    def draw(frame, current_tracks, all_tracks_state, metrics,
+             fx: float = 1.0, fy: float = 1.0):
         v_cfg = settings.visualization
         
         for track_id, bbox in current_tracks:
@@ -36,7 +37,15 @@ class HUD:
 
             # Fused plate text (same criteria as emitted events): junk
             # reads that fusion rejects are never painted on screen.
+            # Last observed plate box in red (drawn here on the viz copy so
+            # shared/preloaded source frames are never mutated).
             if state and state.plate_observations:
+                last = state.plate_observations[-1]
+                px1, py1, px2, py2 = last["bbox"]
+                cv2.rectangle(frame,
+                              (int(px1 * fx), int(py1 * fy)),
+                              (int(px2 * fx), int(py2 * fy)),
+                              (0, 0, 255), 2)
                 plate_text, _ = PlateFusion.fuse(state.plate_observations)
                 if plate_text:
                     cv2.putText(

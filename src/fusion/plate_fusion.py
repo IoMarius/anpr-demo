@@ -7,6 +7,7 @@ from config import settings
 MIN_OBS_CONF = settings.recognition.min_ocr_conf
 SINGLE_OBS_CONF = settings.recognition.stop_confidence
 MIN_PLATE_LENGTH = settings.recognition.min_plate_length
+STRICT_FORMAT = settings.recognition.strict_format
 PLATE_FORMAT = re.compile(settings.recognition.plate_format)
 
 
@@ -21,16 +22,18 @@ class PlateFusion:
         if not observations:
             return None, 0.0
 
-        # 0. Drop low-confidence, too-short, and wrong-format reads so junk
-        # OCR (e.g. STECBUD on a grille) cannot seed an event. Format is the
-        # hard gate: MD plates are 3 letters + 3-4 digits.
+        # 0. Drop low-confidence, too-short, and (in strict mode)
+        # wrong-format reads so junk OCR cannot seed an event. Relax
+        # strict_format to length-only while testing recall on bad footage.
         confident = []
         for obs in observations:
             text = normalize(obs.get("text", ""))
-            if (float(obs.get("conf", 0.0)) >= MIN_OBS_CONF
-                    and len(text) >= MIN_PLATE_LENGTH
-                    and PLATE_FORMAT.fullmatch(text)):
-                confident.append({"text": text, "conf": float(obs["conf"])})
+            if (float(obs.get("conf", 0.0)) < MIN_OBS_CONF
+                    or len(text) < MIN_PLATE_LENGTH):
+                continue
+            if STRICT_FORMAT and not PLATE_FORMAT.fullmatch(text):
+                continue
+            confident.append({"text": text, "conf": float(obs["conf"])})
         if not confident:
             return None, 0.0
 

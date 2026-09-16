@@ -1,6 +1,10 @@
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Any, Tuple
+
+import cv2
+import numpy as np
 
 from config import settings
 from fusion.plate_fusion import PlateFusion
@@ -36,6 +40,14 @@ class TrackManager:
         self.recent_reads: dict = {}
         self.recent_ttl: float = 60.0
         self.recent_max: int = 32
+        # Temporal crop stacking: per-track history of normalized plate
+        # crops; averaging N frames buys sqrt(N) SNR against blur for
+        # slow-moving far plates.
+        self.stack_size: int = settings.recognition.stack_size
+        self.stack_width: int = settings.recognition.stack_width
+        self.stack_height: int = settings.recognition.stack_height
+        self.stack_reset_ratio: float = settings.recognition.stack_reset_ratio
+        self._crop_hist: dict = {}
 
     def update(self, vehicles, current_time):
         self.frame_count += 1
@@ -115,6 +127,30 @@ class TrackManager:
         if state is None or not state.plate_observations:
             return None, 0.0
         return PlateFusion.fuse(state.plate_observations)
+
+    def stacked_crop(self, track_id, crop, bbox):
+        """Accumulate a normalized crop; return the temporal mean.
+
+        Crops are resized to a common shape so frames average pixel-wise.
+        History resets when the plate box jumps (fast motion breaks the
+        alignment assumption). Single observation returns the crop itself.
+        """
+        hist = self._crop_hist.get(track_id)
+        if hist is None:
+            hist = {"crops": deque(maxlen=self.stack_size), "bbox": None}
+            self._crop_hist[track_id] = hist
+        if hist["bbox"] is not None:
+            px, py = hist["bbox"]
+            cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+            w = max(bbox[2] - bbox[0], 1)
+            if abs(cx - px) > w * self.stack_reset_ratio:
+                hist["crops"].clear()
+        hist["bbox"] = ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+        normed = cv2.resize(crop, (self.stack_width, self.stack_height),
+                            interpolation=cv2.INTER_LINEAR)
+        hist["crops"].append(normed.astype(np.float32))
+        mean = sum(hist["crops"]) / len(hist["crops"])
+        return np.clip(mean, 0, 255).astype(np.uint8)
 
     def eligible_for_plate(self, track_id) -> bool:
         interval = settings.detection.plate_interval

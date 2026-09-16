@@ -139,8 +139,12 @@ class ANPRPipeline:
         self.metrics.start("ocr")
         try:
             current_time = time.time()
+            # Temporal stacking: average each job's crop with its track
+            # history before OCR (sqrt(N) SNR gain on blurry far plates).
+            stacked = [self.tracker.stacked_crop(tid, crop, bbox)
+                       for (tid, bbox), crop in zip(jobs, job_crops)]
             for (track_id, p_bbox), (text, ocr_conf) in zip(
-                    jobs, self.ocr.recognize_batch(job_crops)):
+                    jobs, self.ocr.recognize_batch(stacked)):
                 if text:
                     self.tracker.add_plate_observation(track_id, text,
                                                        float(ocr_conf), p_bbox)
@@ -148,9 +152,6 @@ class ANPRPipeline:
                     self.tracker.note_plate_crop(track_id, thumb, text,
                                                  ocr_conf, current_time)
                     self.metrics.mark_recognition()
-                    px1, py1, px2, py2 = p_bbox
-                    cv2.rectangle(np_frame, (px1, py1), (px2, py2),
-                                  (0, 0, 255), 3)
                 else:
                     self.metrics.mark_ocr_rejected()
         finally:
@@ -192,6 +193,7 @@ class ANPRPipeline:
                 print(f"\n[EVENT] {event}\n")
                 emitted.append(event)
             del self.tracker.active_tracks[tid]
+            self.tracker._crop_hist.pop(tid, None)
         return emitted
 
     def visualize(self, np_frame, active_tracks):
@@ -210,8 +212,9 @@ class ANPRPipeline:
                           for tid, (x1, y1, x2, y2) in active_tracks]
             else:
                 viz, tracks = np_frame.copy(), active_tracks
+                fx, fy = 1.0, 1.0
             viz = HUD.draw(viz, tracks, self.tracker.active_tracks,
-                           self.metrics)
+                           self.metrics, fx=fx, fy=fy)
             if cfg.sidebar_enabled:
                 viz = HUD.draw_sidebar(viz, self.tracker)
             return viz

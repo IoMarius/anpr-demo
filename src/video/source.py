@@ -38,10 +38,34 @@ class VideoSource:
         self.fps = self._probe_fps()
         self.stopped = False
         self.Q = queue.Queue(maxsize=queue_size)
+        self._clip: list | None = None
+        self._clip_idx = 0
+        if (settings.video.preload_clip and mode != "live"
+                and self.backend.startswith("cpu-ffmpeg")):
+            self._preload_clip(settings.video.preload_max_frames)
 
         self.thread = threading.Thread(target=self._update, args=())
         self.thread.daemon = True
         self.thread.start()
+
+    def _preload_clip(self, max_frames: int):
+        """Decode short files into RAM once; cycle without seeks.
+
+        Looping a short mp4 via CAP_PROP_POS_FRAMES forces a keyframe
+        seek every cycle (stall + burst = stutter). A 60-frame 720p clip
+        is ~170MB; cap the frame count to bound memory.
+        """
+        frames = []
+        while len(frames) < max_frames:
+            grabbed, frame = self.stream.read()
+            if not grabbed:
+                break
+            self.frames_decoded += 1
+            frames.append(self._wrap(frame, self.frames_decoded))
+        if frames:
+            self._clip = frames
+            print(f"[VIDEO] preloaded {len(frames)} frames into RAM "
+                  f"(no seek-loop stutter)")
 
     def _open(self, source_path: str, hardware_decode: bool):
         self.codec = probe_codec(source_path)
@@ -93,6 +117,9 @@ class VideoSource:
 
     def _update(self):
         while not self.stopped:
+            if self._clip is not None:
+                self._serve_clip()
+                continue
             if self.mode == "live" and self.Q.full():
                 try:
                     self.Q.get_nowait()
@@ -137,6 +164,17 @@ class VideoSource:
                     self.frames_dropped += 1
             else:
                 time.sleep(0.01)
+
+    def _serve_clip(self):
+        """Cycle preloaded frames; blocks when the queue is full."""
+        item = self._clip[self._clip_idx % len(self._clip)]
+        self._clip_idx += 1
+        try:
+            self.Q.put(item, timeout=0.1)
+        except queue.Full:
+            # Consumer is pacing slower than the loop; retry (do not advance
+            # further, do not sleep-spin).
+            self._clip_idx -= 1
 
     def read(self):
         return self.Q.get()

@@ -38,6 +38,11 @@ class RecognitionSettings(BaseSettings):
     upscale_max_factor: float = 4.0
     sharpen: bool = False
     plate_format: str = "^[A-Z]{3}[0-9]{3,4}$"
+    strict_format: bool = True
+    stack_size: int = 5
+    stack_width: int = 160
+    stack_height: int = 48
+    stack_reset_ratio: float = 0.5
 
 
 # for paddle
@@ -68,6 +73,8 @@ class VideoSettings(BaseSettings):
     max_decode_failures: int = 60
     target_fps: int = 30
     realtime_pacing: bool = True
+    preload_clip: bool = True
+    preload_max_frames: int = 300
 
 
 class VisualizationSettings(BaseSettings):
