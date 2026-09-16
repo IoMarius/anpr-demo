@@ -138,11 +138,15 @@ class ANPRPipeline:
     def run_ocr(self, np_frame, jobs, job_crops):
         self.metrics.start("ocr")
         try:
+            current_time = time.time()
             for (track_id, p_bbox), (text, ocr_conf) in zip(
                     jobs, self.ocr.recognize_batch(job_crops)):
                 if text:
                     self.tracker.add_plate_observation(track_id, text,
                                                        float(ocr_conf), p_bbox)
+                    thumb = self._plate_thumbnail(np_frame, p_bbox)
+                    self.tracker.note_plate_crop(track_id, thumb, text,
+                                                 ocr_conf, current_time)
                     self.metrics.mark_recognition()
                     px1, py1, px2, py2 = p_bbox
                     cv2.rectangle(np_frame, (px1, py1), (px2, py2),
@@ -151,6 +155,22 @@ class ANPRPipeline:
                     self.metrics.mark_ocr_rejected()
         finally:
             self.metrics.stop("ocr")
+
+    @staticmethod
+    def _plate_thumbnail(np_frame, p_bbox, width: int = 160):
+        fh, fw = np_frame.shape[0], np_frame.shape[1]
+        x1, y1, x2, y2 = p_bbox
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(fw, x2), min(fh, y2)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        crop = np_frame[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        h, w = crop.shape[0], crop.shape[1]
+        scale = width / max(w, 1)
+        return cv2.resize(crop, (width, max(1, int(h * scale))),
+                          interpolation=cv2.INTER_LINEAR)
 
     def emit_events(self, current_time):
         stale_ids = self.tracker.pop_stale_ids(current_time)
@@ -190,7 +210,10 @@ class ANPRPipeline:
                           for tid, (x1, y1, x2, y2) in active_tracks]
             else:
                 viz, tracks = np_frame.copy(), active_tracks
-            return HUD.draw(viz, tracks, self.tracker.active_tracks,
-                            self.metrics)
+            viz = HUD.draw(viz, tracks, self.tracker.active_tracks,
+                           self.metrics)
+            if cfg.sidebar_enabled:
+                viz = HUD.draw_sidebar(viz, self.tracker.active_tracks)
+            return viz
         finally:
             self.metrics.stop("rendering")

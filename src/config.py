@@ -87,6 +87,9 @@ class VisualizationSettings(BaseSettings):
     output_width: int = 1280
     output_height: int = 720
     jpeg_quality: int = 80
+    sidebar_enabled: bool = True
+    sidebar_width: int = 320
+    sidebar_max_rows: int = 8
 
 class DemoSettings(BaseSettings):
     video_url: str = "/home/smartgov/Pictures/sample/output.mp4"

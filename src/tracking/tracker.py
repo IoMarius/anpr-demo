@@ -11,6 +11,10 @@ class TrackState:
     last_seen: float
     vehicle_class: int
     plate_observations: List[Any] = field(default_factory=list)
+    last_plate_crop: Any = None
+    last_plate_text: str = ""
+    last_plate_conf: float = 0.0
+    last_plate_time: float = 0.0
 
 class TrackManager:
     """Application state store, NOT a motion tracker.
@@ -55,6 +59,16 @@ class TrackManager:
                 "conf": confidence,
                 "bbox": bbox  # Save the coordinates here
             })
+
+    def note_plate_crop(self, track_id, crop_thumb, text, confidence,
+                        current_time):
+        state = self.active_tracks.get(track_id)
+        if state is None:
+            return
+        state.last_plate_crop = crop_thumb
+        state.last_plate_text = text
+        state.last_plate_conf = float(confidence)
+        state.last_plate_time = current_time
 
     def eligible_for_plate(self, track_id) -> bool:
         interval = settings.detection.plate_interval
