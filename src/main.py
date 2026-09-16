@@ -65,7 +65,7 @@ def main():
 
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
-    print("Video stream available at http://172.18.64.20:5000/")
+    print(f"Video stream available at http:{settings.demo.host}//:{settings.demo.port}/")
     print("Pipeline started. Press 'q' to quit.")
     
     try:
@@ -100,11 +100,9 @@ def main():
                         if text:
                             tracker.add_plate_observation(track_id, text, ocr_conf, p_bbox)
                             metrics.mark_recognition()
-                            
-                            # Draw plate box for visualization
+                                                        
                             # Draw RED plate box instantly only on this specific frame
-                            cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 0, 255), 3)
-                            # cv2.rectangle(frame, (px1, py1), (px2, py2), (255, 0, 0), 2)
+                            cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 0, 255), 3)                            
 
             # 4. Process Stale Tracks & Emit Events
             # Extract finished tracks from the tracker's internal state
@@ -129,18 +127,14 @@ def main():
                 del tracker.active_tracks[tid]
 
             # 5. Visualization            
-            render_frame = HUD.draw(frame.copy(), active_tracks, tracker.active_tracks, metrics)
-            # cv2.imshow("ANPR Pipeline", render_frame)
+            render_frame = HUD.draw(frame.copy(), active_tracks, tracker.active_tracks, metrics)            
             
             global latest_frame
             with frame_lock:
-                latest_frame = render_frame.copy()
-            # if cv2.waitKey(1) & 0xFF == ord('q'):
-            #     break
+                latest_frame = render_frame.copy()            
                 
     finally:
-        source.stop()
-        # cv2.destroyAllWindows()
+        source.stop()        
 
 if __name__ == "__main__":
     main()
