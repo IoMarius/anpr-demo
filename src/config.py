@@ -16,6 +16,7 @@ class DetectionSettings(BaseSettings):
     vehicle_interval: int = 2
     plate_interval: int = 2
     imgsz: int = 640
+    use_tensorrt: bool = False
 
 
 class RecognitionSettings(BaseSettings):
@@ -30,11 +31,11 @@ class RecognitionSettings(BaseSettings):
     stop_confidence: float = 0.7
     easyocr_detector: bool = False
     quantize: bool = False
-    min_ocr_conf: float = 0.4
+    min_ocr_conf: float = 0.5
     min_plate_length: int = 4
     upscale_target: int = 300
     upscale_max_factor: float = 4.0
-    sharpen: bool = True
+    sharpen: bool = False
 
 
 # for paddle
@@ -49,7 +50,7 @@ class QualitySettings(BaseSettings):
     min_width: int = 40
     min_height: int = 12
     min_confidence: float = 0.45
-    blur_threshold: float = 50.0
+    blur_threshold: float = 90.0
     min_aspect: float = 1.5
 
 
@@ -63,6 +64,8 @@ class VideoSettings(BaseSettings):
     gpu_frames: bool = False
     mode: str = "offline"
     max_decode_failures: int = 60
+    target_fps: int = 30
+    realtime_pacing: bool = True
 
 
 class VisualizationSettings(BaseSettings):

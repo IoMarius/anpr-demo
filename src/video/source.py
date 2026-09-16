@@ -35,6 +35,7 @@ class VideoSource:
         self.error: str | None = None
 
         self.stream = self._open(source_path, hardware_decode)
+        self.fps = self._probe_fps()
         self.stopped = False
         self.Q = queue.Queue(maxsize=queue_size)
 
@@ -74,6 +75,15 @@ class VideoSource:
             raise ValueError(f"Failed to open video source: {source_path}")
         self.backend = f"cpu-ffmpeg({self.codec})"
         return stream
+
+    def _probe_fps(self) -> float:
+        try:
+            fps = float(self.stream.get(cv2.CAP_PROP_FPS))
+        except Exception:
+            fps = 0.0
+        if not fps or fps != fps or fps <= 0 or fps > 240:
+            return 30.0
+        return fps
 
     def _wrap(self, frame, frame_id: int):
         if self.gpu_frames:

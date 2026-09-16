@@ -63,7 +63,9 @@ def main():
           f"plate_interval={settings.detection.plate_interval} "
           f"ocr_interval_ms={settings.recognition.interval_ms} "
           f"video.mode={settings.video.mode} hw_decode={settings.video.hardware_decode} "
-          f"gpu_frames={settings.video.gpu_frames}")
+          f"gpu_frames={settings.video.gpu_frames} "
+          f"target_fps={settings.video.target_fps} pacing={settings.video.realtime_pacing} "
+          f"tensorrt={settings.detection.use_tensorrt}")
     source = VideoSource(VIDEO_URL)
     print(f"[VIDEO] backend={source.backend} mode={source.mode}")
     pipeline = ANPRPipeline(
@@ -81,13 +83,30 @@ def main():
     server_thread.start()
     print(f"Video stream available at http:{settings.demo.host}//:{settings.demo.port}/")
     print("Pipeline started. Press 'q' to quit.")
-    
+
+    pace_fps = 0.0
+    if settings.video.realtime_pacing and settings.video.target_fps > 0:
+        pace_fps = min(float(settings.video.target_fps), source.fps)
+        print(f"[VIDEO] pacing to {pace_fps:.1f} FPS "
+              f"(source={source.fps:.1f} target={settings.video.target_fps})")
+    next_deadline = time.time()
+
     try:
         while source.more():
             pipeline.metrics.start("decode")
             frame = source.read()
             pipeline.metrics.stop("decode")
             render_frame = pipeline.process_frame(frame)
+
+            if pace_fps > 0:
+                next_deadline += 1.0 / pace_fps
+                delay = next_deadline - time.time()
+                if delay > 0:
+                    time.sleep(delay)
+                else:
+                    # Pipeline slower than realtime; resync instead of
+                    # accumulating debt.
+                    next_deadline = time.time()
 
             if render_frame is None:
                 continue

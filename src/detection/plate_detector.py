@@ -3,6 +3,7 @@ import torch
 
 from config import settings
 from utils.device import resolve_device, log_gpu_status, touch_cuda
+from utils.export import ensure_engine
 from utils.gpu_preprocess import letterbox_gpu, unscale_boxes
 
 class PlateDetector:
@@ -10,18 +11,28 @@ class PlateDetector:
         self, model_path: str = settings.detection.plate_model,
         conf_threshold: float = settings.detection.confidence_threshold,                 
         verbose: bool = settings.detection.verbose,
-        device: str = settings.detection.device
+        device: str = settings.detection.device,
+        imgsz: int = settings.detection.imgsz
     ):
-        self.model = YOLO(model_path)
+        artifact = model_path
+        if settings.detection.use_tensorrt:
+            artifact = ensure_engine(model_path, imgsz) or model_path
+        self.model = YOLO(artifact)
+        self.is_engine = artifact.endswith(".engine")
         self.conf_threshold = conf_threshold
         self.verbose = verbose
+        self.imgsz = imgsz
         self.device = resolve_device(device, settings.gpu.enabled)
         if self.device.startswith("cuda") and not touch_cuda(self.device):
             self.device = "cpu"
+        # Engines carry native FP16 precision, so no precision kwarg there.
         self.use_fp16 = (settings.gpu.fp16 and torch.cuda.is_available()
-                     and self.device.startswith("cuda"))
+                         and self.device.startswith("cuda")
+                         and not self.is_engine)
         self._precision = {"quantize": "fp16"} if self.use_fp16 else {}
-        log_gpu_status(f"plate_detector resolved={self.device} quantize={'fp16' if self.use_fp16 else 'fp32'}")
+        log_gpu_status(f"plate_detector artifact={artifact} "
+                       f"resolved={self.device} "
+                       f"quantize={'fp16' if self.use_fp16 else 'fp32'}")
 
     def detect_batch(self, crops):
         """Batched inference over vehicle crops.
@@ -42,6 +53,7 @@ class PlateDetector:
             conf=self.conf_threshold,
             verbose=self.verbose,
             device=self.device,
+            imgsz=self.imgsz,
             **self._precision)
         out = {}
         for (track_id, (x1, y1, _, _), _), result in zip(valid, results):
@@ -98,6 +110,7 @@ class PlateDetector:
             conf=self.conf_threshold, 
             verbose=self.verbose, 
             device=self.device,
+            imgsz=self.imgsz,
             **self._precision);
         
         best_plate = None

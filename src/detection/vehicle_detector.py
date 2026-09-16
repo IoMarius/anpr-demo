@@ -2,6 +2,7 @@ from ultralytics import YOLO
 import torch
 from config import settings
 from utils.device import resolve_device, log_gpu_status, touch_cuda
+from utils.export import ensure_engine
 from utils.gpu_preprocess import letterbox_gpu, unscale_boxes
 from video.frames import GPUFrame, CPUFrame
 
@@ -20,20 +21,28 @@ class VehicleDetector:
         device: str = settings.detection.device,
         imgsz: int = settings.detection.imgsz
     ):
-        self.model = YOLO(model_path)
+        self.imgsz = imgsz
+        artifact = model_path
+        if settings.detection.use_tensorrt:
+            artifact = ensure_engine(model_path, imgsz) or model_path
+        self.model = YOLO(artifact)
+        self.is_engine = artifact.endswith(".engine")
         self.device = resolve_device(device, settings.gpu.enabled)
         if self.device.startswith("cuda") and not touch_cuda(self.device):
             self.device = "cpu"
         # Phase 18: FP16 only where CUDA actually runs; CPU stays FP32 with
         # no extra kwargs (avoids deprecated-flag warnings on CPU boxes).
+        # Engines carry native FP16 precision, so no precision kwarg there.
         self.use_fp16 = (settings.gpu.fp16 and torch.cuda.is_available()
-                     and self.device.startswith("cuda"))
+                         and self.device.startswith("cuda")
+                         and not self.is_engine)
         self._precision = {"quantize": "fp16"} if self.use_fp16 else {}
         self.vehicle_classes = vehicle_classes
         self.conf_threshold = conf_threshold
         self.verbose = verbose
-        self.imgsz = imgsz
-        log_gpu_status(f"vehicle_detector resolved={self.device} quantize={'fp16' if self.use_fp16 else 'fp32'}")
+        log_gpu_status(f"vehicle_detector artifact={artifact} "
+                       f"resolved={self.device} "
+                       f"quantize={'fp16' if self.use_fp16 else 'fp32'}")
 
     def detect(self, frame):
         if isinstance(frame, GPUFrame):
