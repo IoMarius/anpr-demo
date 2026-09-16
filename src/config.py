@@ -8,7 +8,7 @@ class GpuSettings(BaseSettings):
 
 class DetectionSettings(BaseSettings):    
     vehicle_model: str = "models/yolov8n.pt"
-    plate_model: str = "models/plate_yolov8n.pt"
+    plate_model: str = "models/best.pt"
     vehicle_class_ids: list[int] = [2, 3, 5, 7]
     confidence_threshold: float = 0.25
     device: str = "cuda:0"
@@ -82,7 +82,7 @@ class VisualizationSettings(BaseSettings):
     jpeg_quality: int = 80
 
 class DemoSettings(BaseSettings):
-    video_url: str = "../sample/highway-4k-h264.mp4"
+    video_url: str = "/home/smartgov/Pictures/sample/sample.mp4"
     camera_id: str = "DEMO-CAM-1"
     host: str = "0.0.0.0"
     port: int = 5000
