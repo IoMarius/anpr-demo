@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from config import settings
+from fusion.plate_fusion import PlateFusion
 
 class HUD:
     @staticmethod
@@ -33,20 +34,21 @@ class HUD:
                 cv2.LINE_AA
             )
 
-            # Large plate number (Persistent Text)
+            # Fused plate text (same criteria as emitted events): junk
+            # reads that fusion rejects are never painted on screen.
             if state and state.plate_observations:
-                plate_text = state.plate_observations[-1]["text"]
-
-                cv2.putText(
-                    frame,
-                    plate_text,
-                    (x1, max(y1 - 5, 65)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    v_cfg.plate_font_scale,
-                    v_cfg.plate_text_color,
-                    v_cfg.plate_thickness,
-                    cv2.LINE_AA
-                )
+                plate_text, _ = PlateFusion.fuse(state.plate_observations)
+                if plate_text:
+                    cv2.putText(
+                        frame,
+                        plate_text,
+                        (x1, max(y1 - 5, 65)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        v_cfg.plate_font_scale,
+                        v_cfg.plate_text_color,
+                        v_cfg.plate_thickness,
+                        cv2.LINE_AA
+                    )
 
         # Metrics HUD
         fps = metrics.get_fps()
@@ -89,9 +91,14 @@ class HUD:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2,
                     cv2.LINE_AA)
 
-        readers = [s for s in all_tracks_state.values()
-                   if s.last_plate_crop is not None]
-        readers.sort(key=lambda s: s.last_plate_time, reverse=True)
+        readers = []
+        for s in all_tracks_state.values():
+            if s.last_plate_crop is None:
+                continue
+            text, conf = PlateFusion.fuse(s.plate_observations)
+            if text:
+                readers.append((s, text, float(conf)))
+        readers.sort(key=lambda r: r[0].last_plate_time, reverse=True)
         readers = readers[:v_cfg.sidebar_max_rows]
 
         if not readers:
@@ -101,7 +108,7 @@ class HUD:
             return np.hstack([bar, frame])
 
         top, row_h = 48, max(1, (height - 48) // v_cfg.sidebar_max_rows)
-        for state in readers:
+        for state, text, conf in readers:
             thumb = state.last_plate_crop
             th, tw = thumb.shape[0], thumb.shape[1]
             scale = min(160 / max(tw, 1), (row_h - 8) / max(th, 1))
@@ -117,10 +124,10 @@ class HUD:
             cv2.putText(bar, f"ID {state.id}", (tx, top + 24),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2,
                         cv2.LINE_AA)
-            cv2.putText(bar, f"{state.last_plate_text}", (tx, top + 50),
+            cv2.putText(bar, f"{text}", (tx, top + 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2,
                         cv2.LINE_AA)
-            cv2.putText(bar, f"{state.last_plate_conf:.2f}", (tx, top + 72),
+            cv2.putText(bar, f"{conf:.2f}", (tx, top + 72),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1,
                         cv2.LINE_AA)
             top += row_h

@@ -1,8 +1,9 @@
 import time
 from dataclasses import dataclass, field
-from typing import List, Any
+from typing import List, Any, Tuple
 
 from config import settings
+from fusion.plate_fusion import PlateFusion
 
 @dataclass
 class TrackState:
@@ -65,10 +66,27 @@ class TrackManager:
         state = self.active_tracks.get(track_id)
         if state is None:
             return
-        state.last_plate_crop = crop_thumb
-        state.last_plate_text = text
-        state.last_plate_conf = float(confidence)
+        # Keep the thumbnail of the best read; the sidebar/HUD show fused
+        # text, so the crop should represent the strongest evidence, not
+        # the latest (possibly junk) read.
+        if (state.last_plate_crop is None
+                or float(confidence) >= state.last_plate_conf):
+            state.last_plate_crop = crop_thumb
+            state.last_plate_text = text
+            state.last_plate_conf = float(confidence)
         state.last_plate_time = current_time
+
+    def display(self, track_id) -> Tuple[str | None, float]:
+        """Screen-worthy text: same fused criteria as emitted events.
+
+        HUD/sidebar previously showed the latest raw read, so junk that
+        fusion would reject was still painted on screen. Now what you see
+        is what would get emitted.
+        """
+        state = self.active_tracks.get(track_id)
+        if state is None or not state.plate_observations:
+            return None, 0.0
+        return PlateFusion.fuse(state.plate_observations)
 
     def eligible_for_plate(self, track_id) -> bool:
         interval = settings.detection.plate_interval
