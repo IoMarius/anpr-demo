@@ -82,7 +82,7 @@ class VisualizationSettings(BaseSettings):
     jpeg_quality: int = 80
 
 class DemoSettings(BaseSettings):
-    video_url: str = "/home/smartgov/Pictures/sample/sample.mp4"
+    video_url: str = "/home/smartgov/Pictures/sample/output.mp4"
     camera_id: str = "DEMO-CAM-1"
     host: str = "0.0.0.0"
     port: int = 5000
