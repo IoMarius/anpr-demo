@@ -1,7 +1,16 @@
 from ultralytics import YOLO
+import torch
 from config import settings
+from utils.device import resolve_device, log_gpu_status
+from utils.gpu_preprocess import letterbox_gpu, unscale_boxes
+from video.frames import GPUFrame, CPUFrame
 
 class VehicleDetector:
+    """Motion owner: Ultralytics YOLO tracking is the single source of track IDs.
+
+    TrackManager owns application state (observations, timestamps, fusion
+    input) and must NOT run its own motion association.
+    """
     def __init__(
         self,
         model_path: str = settings.detection.vehicle_model,
@@ -11,20 +20,65 @@ class VehicleDetector:
         device: str = settings.detection.device
     ):
         self.model = YOLO(model_path)
-        self.device = device
+        self.device = resolve_device(device, settings.gpu.enabled)
+        # Phase 18: FP16 only where CUDA actually runs; CPU stays FP32 with
+        # no extra kwargs (avoids deprecated-flag warnings on CPU boxes).
+        self.half = (settings.gpu.fp16 and torch.cuda.is_available()
+                     and self.device.startswith("cuda"))
+        self._precision = {"half": True} if self.half else {}
         self.vehicle_classes = vehicle_classes
         self.conf_threshold = conf_threshold
         self.verbose = verbose
+        log_gpu_status(f"vehicle_detector resolved={self.device} half={self.half}")
 
     def detect(self, frame):
+        if isinstance(frame, GPUFrame):
+            return self._detect_gpu(frame)
+        arr = frame.data if isinstance(frame, CPUFrame) else frame
+        return self._detect_numpy(arr)
+
+    def _detect_numpy(self, arr):
         results = self.model.track(
-            frame,
+            arr,
             classes=self.vehicle_classes,
             conf=self.conf_threshold,
             persist=True,
             verbose=self.verbose,
-            device=self.device
+            device=self.device,
+            **self._precision
         )
+        return self._parse(results)
+
+    def _detect_gpu(self, frame: GPUFrame):
+        h, w = frame.height, frame.width
+        batch, scale, pad_w, pad_h = letterbox_gpu(frame.tensor)
+        if self.half:
+            batch = batch.half()
+        results = self.model.track(
+            batch,
+            classes=self.vehicle_classes,
+            conf=self.conf_threshold,
+            persist=True,
+            verbose=self.verbose,
+            device=self.device,
+            **self._precision
+        )
+        vehicles = []
+        for result in results:
+            if result.boxes is not None and result.boxes.id is not None:
+                boxes = unscale_boxes(result.boxes.xyxy, scale, pad_w, pad_h, w, h)
+                track_ids = result.boxes.id.int().cpu().tolist()
+                class_ids = result.boxes.cls.int().cpu().tolist()
+                for box, track_id, class_id in zip(boxes.cpu().numpy(), track_ids, class_ids):
+                    x1, y1, x2, y2 = map(int, box)
+                    vehicles.append({
+                        "bbox": (x1, y1, x2, y2),
+                        "track_id": track_id,
+                        "class_id": class_id,
+                    })
+        return vehicles
+
+    def _parse(self, results):
         vehicles = []
         for result in results:
             if result.boxes is not None and result.boxes.id is not None:

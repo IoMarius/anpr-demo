@@ -7,10 +7,10 @@ from tracking.tracker import TrackManager
 from quality.gate import QualityGate
 from recognition.recognizer import PlateRecognizer
 from fusion.plate_fusion import PlateFusion
-from events.models import PlateEvent
-from visualization.renderer import HUD
+from pipeline import ANPRPipeline
 from metrics import PipelineMetrics
 from config import settings
+from utils.device import log_gpu_status
 import threading
 from flask import Flask, Response
 
@@ -27,7 +27,9 @@ def generate_frames():
                 continue
             
             # Compress the frame to JPEG for the browser
-            ret, buffer = cv2.imencode('.jpg', latest_frame)
+            ret, buffer = cv2.imencode(
+                '.jpg', latest_frame,
+                [cv2.IMWRITE_JPEG_QUALITY, settings.visualization.jpeg_quality])
             
         if not ret:
             continue
@@ -54,14 +56,24 @@ def main():
     
     # Initialize components
     print("Initializing pipeline components...")
+    log_gpu_status("startup")
+    print(f"[CONFIG] gpu.enabled={settings.gpu.enabled} device={settings.detection.device} "
+          f"plate_interval={settings.detection.plate_interval} "
+          f"ocr_interval_ms={settings.recognition.interval_ms} "
+          f"video.mode={settings.video.mode} hw_decode={settings.video.hardware_decode} "
+          f"gpu_frames={settings.video.gpu_frames}")
     source = VideoSource(VIDEO_URL)
-    vehicle_det = VehicleDetector()
-    plate_det = PlateDetector()
-    tracker = TrackManager()
-    gate = QualityGate()
-    ocr = PlateRecognizer()
-    fusion = PlateFusion()
-    metrics = PipelineMetrics()
+    print(f"[VIDEO] backend={source.backend} mode={source.mode}")
+    pipeline = ANPRPipeline(
+        vehicle_det=VehicleDetector(),
+        plate_det=PlateDetector(),
+        tracker=TrackManager(),
+        gate=QualityGate(),
+        ocr=PlateRecognizer(),
+        fusion=PlateFusion(),
+        metrics=PipelineMetrics(),
+        camera_id=CAMERA_ID,
+    )
 
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
@@ -70,68 +82,16 @@ def main():
     
     try:
         while source.more():
+            pipeline.metrics.start("decode")
             frame = source.read()
-            if frame is None:
+            pipeline.metrics.stop("decode")
+            render_frame = pipeline.process_frame(frame)
+
+            if render_frame is None:
                 continue
-
-            current_time = time.time()
-            
-            # 1. Vehicle Detection
-            vehicles = vehicle_det.detect(frame)
-            
-            # 2. Tracking
-            active_tracks = tracker.update(vehicles, current_time)
-            metrics.update(len(active_tracks))
-            
-            # 3. Two-Stage Plate Detection & OCR
-            for track_id, v_bbox in active_tracks:
-                plate_result = plate_det.detect(frame, v_bbox)
-                
-                if plate_result:
-                    p_bbox, p_conf = plate_result["bbox"], plate_result["conf"]
-                    
-                    # Quality Gate
-                    if gate.is_valid(p_bbox, p_conf, frame):
-                        # Crop and OCR
-                        px1, py1, px2, py2 = p_bbox
-                        plate_crop = frame[py1:py2, px1:px2]
-                        
-                        text, ocr_conf = ocr.recognize(plate_crop)
-                        if text:
-                            tracker.add_plate_observation(track_id, text, ocr_conf, p_bbox)
-                            metrics.mark_recognition()
-                                                        
-                            # Draw RED plate box instantly only on this specific frame
-                            cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 0, 255), 3)                            
-
-            # 4. Process Stale Tracks & Emit Events
-            # Extract finished tracks from the tracker's internal state
-            stale_ids = [tid for tid, state in tracker.active_tracks.items() 
-                         if current_time - state.last_seen > tracker.stale_timeout]
-            
-            for tid in stale_ids:
-                state = tracker.active_tracks[tid]
-                fused_plate, fused_conf = fusion.fuse(state.plate_observations)
-                
-                if fused_plate:
-                    event = PlateEvent(
-                        track_id=tid,
-                        plate=fused_plate,
-                        confidence=fused_conf,
-                        first_seen=str(state.first_seen),
-                        last_seen=str(state.last_seen),
-                        camera_id=CAMERA_ID
-                    )
-                    print(f"\n[EVENT] {event}\n") # The only output contract[cite: 1]
-                
-                del tracker.active_tracks[tid]
-
-            # 5. Visualization            
-            render_frame = HUD.draw(frame.copy(), active_tracks, tracker.active_tracks, metrics)            
-            
             global latest_frame
             with frame_lock:
-                latest_frame = render_frame.copy()            
+                latest_frame = render_frame.copy()
                 
     finally:
         source.stop()        
