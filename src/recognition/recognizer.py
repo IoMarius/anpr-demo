@@ -22,6 +22,8 @@ class PlateRecognizer:
         self.allowlist = allowlist
         self.no_read_confidence = no_read_confidence
         self.min_ocr_conf = min_ocr_conf
+        self.use_detector = use_detector and hasattr(self.reader,
+                                                     "get_textbox")
         log_gpu_status(f"recognizer gpu={self.use_gpu} "
                        f"detector={use_detector} quantize={quantize}")
 
@@ -41,12 +43,20 @@ class PlateRecognizer:
 
     def recognize(self, plate_crop):
         # Upscale small crops: EasyOCR was trained on larger text;
-        # 2x nearest-neighbor is ~0.1ms and lifts tiny-plate recall.
+        # 2x cubic is ~0.1ms and lifts tiny-plate recall.
         h, w = plate_crop.shape[0], plate_crop.shape[1]
         if max(h, w) < 200:
             plate_crop = cv2.resize(plate_crop, (w * 2, h * 2),
                                     interpolation=cv2.INTER_CUBIC)
-        results = self.reader.readtext(plate_crop, allowlist=self.allowlist)
+        if self.use_detector:
+            results = self.reader.readtext(plate_crop,
+                                           allowlist=self.allowlist)
+        else:
+            # Detector-less reader has no get_textbox, so readtext() would
+            # crash; recognize() with no boxes defaults to a full-image
+            # box, which is exactly right for a tight plate crop.
+            results = self.reader.recognize(plate_crop,
+                                            allowlist=self.allowlist)
         if not results:
             return None, self.no_read_confidence
 
