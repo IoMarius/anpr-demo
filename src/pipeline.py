@@ -213,7 +213,7 @@ class ANPRPipeline:
             viz = HUD.draw(viz, tracks, self.tracker.active_tracks,
                            self.metrics)
             if cfg.sidebar_enabled:
-                viz = HUD.draw_sidebar(viz, self.tracker.active_tracks)
+                viz = HUD.draw_sidebar(viz, self.tracker)
             return viz
         finally:
             self.metrics.stop("rendering")

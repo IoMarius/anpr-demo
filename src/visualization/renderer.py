@@ -75,12 +75,12 @@ class HUD:
         return frame
 
     @staticmethod
-    def draw_sidebar(frame, all_tracks_state):
-        """Left detection bar: one row per recent plate read.
+    def draw_sidebar(frame, tracker):
+        """Left detection bar: persistent recent reads.
 
-        Each row shows the plate crop thumbnail, car track ID and the
-        recognized value with confidence. Composed server-side so the
-        existing MJPEG stream carries it with no frontend changes.
+        Rows come from tracker.recent_reads (60s history), not live tracks,
+        so a read stays visible after its car leaves or its track ID rolls.
+        Only fused, event-grade text is recorded there.
         """
         v_cfg = settings.visualization
         width = v_cfg.sidebar_width
@@ -91,14 +91,8 @@ class HUD:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2,
                     cv2.LINE_AA)
 
-        readers = []
-        for s in all_tracks_state.values():
-            if s.last_plate_crop is None:
-                continue
-            text, conf = PlateFusion.fuse(s.plate_observations)
-            if text:
-                readers.append((s, text, float(conf)))
-        readers.sort(key=lambda r: r[0].last_plate_time, reverse=True)
+        readers = sorted(tracker.recent_reads.items(),
+                         key=lambda kv: kv[1]["time"], reverse=True)
         readers = readers[:v_cfg.sidebar_max_rows]
 
         if not readers:
@@ -108,8 +102,9 @@ class HUD:
             return np.hstack([bar, frame])
 
         top, row_h = 48, max(1, (height - 48) // v_cfg.sidebar_max_rows)
-        for state, text, conf in readers:
-            thumb = state.last_plate_crop
+        for track_id, entry in readers:
+            thumb = entry["thumb"]
+            text, conf = entry["text"], entry["conf"]
             th, tw = thumb.shape[0], thumb.shape[1]
             scale = min(160 / max(tw, 1), (row_h - 8) / max(th, 1))
             thumb = cv2.resize(thumb,
@@ -121,7 +116,7 @@ class HUD:
             bar[y:y + th, 8:8 + tw] = thumb
 
             tx = 180
-            cv2.putText(bar, f"ID {state.id}", (tx, top + 24),
+            cv2.putText(bar, f"ID {track_id}", (tx, top + 24),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2,
                         cv2.LINE_AA)
             cv2.putText(bar, f"{text}", (tx, top + 50),

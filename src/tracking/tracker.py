@@ -30,6 +30,12 @@ class TrackManager:
         self.frame_count = 0
         self._last_plate_frame: dict = {}
         self._last_ocr_time: dict = {}
+        # Sidebar history, independent of track liveness: stale tracks are
+        # deleted from active_tracks (taking their reads with them), which
+        # made sidebar rows vanish seconds after appearing.
+        self.recent_reads: dict = {}
+        self.recent_ttl: float = 60.0
+        self.recent_max: int = 32
 
     def update(self, vehicles, current_time):
         self.frame_count += 1
@@ -75,6 +81,28 @@ class TrackManager:
             state.last_plate_text = text
             state.last_plate_conf = float(confidence)
         state.last_plate_time = current_time
+        # Record event-grade reads for the sidebar. add_plate_observation
+        # runs before this, so fusion sees the new read; only fused-worthy
+        # text persists (same criteria as emitted events).
+        fused_text, fused_conf = PlateFusion.fuse(state.plate_observations)
+        if fused_text:
+            self.recent_reads[track_id] = {
+                "thumb": state.last_plate_crop,
+                "text": fused_text,
+                "conf": float(fused_conf),
+                "time": current_time,
+            }
+            self._prune_recent(current_time)
+
+    def _prune_recent(self, current_time):
+        stale = [tid for tid, r in self.recent_reads.items()
+                 if current_time - r["time"] > self.recent_ttl]
+        for tid in stale:
+            del self.recent_reads[tid]
+        while len(self.recent_reads) > self.recent_max:
+            oldest = min(self.recent_reads,
+                         key=lambda tid: self.recent_reads[tid]["time"])
+            del self.recent_reads[oldest]
 
     def display(self, track_id) -> Tuple[str | None, float]:
         """Screen-worthy text: same fused criteria as emitted events.

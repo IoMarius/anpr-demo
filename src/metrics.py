@@ -1,5 +1,5 @@
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 
 STAGES = (
     "decode",
@@ -38,6 +38,10 @@ class PipelineMetrics:
         self.gate_reject_blur = 0
         self._frame_plate_calls = 0
         self._frame_ocr_calls = 0
+        # Rolling FPS window: cumulative frame_count/elapsed includes model
+        # load + warmup, so the HUD number ramps for minutes. A 60-frame
+        # window shows the true current rate within ~2s at 30fps.
+        self._frame_times: deque = deque(maxlen=60)
 
     def start(self, stage: str):
         self._pending[stage] = time.perf_counter()
@@ -50,6 +54,7 @@ class PipelineMetrics:
     def update(self, active_tracks):
         self.frame_count += 1
         self.active_tracks = active_tracks
+        self._frame_times.append(time.time())
 
     def mark_recognition(self):
         self.recognized_plates += 1
@@ -115,6 +120,10 @@ class PipelineMetrics:
         return sum(vals) / len(vals) if vals else 0.0
 
     def get_fps(self):
+        if len(self._frame_times) >= 2:
+            span = self._frame_times[-1] - self._frame_times[0]
+            if span > 0:
+                return (len(self._frame_times) - 1) / span
         elapsed = time.time() - self.start_time
         if elapsed == 0:
             return 0
