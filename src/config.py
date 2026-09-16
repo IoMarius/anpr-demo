@@ -10,11 +10,12 @@ class DetectionSettings(BaseSettings):
     vehicle_model: str = "models/yolov8n.pt"
     plate_model: str = "models/best.pt"
     vehicle_class_ids: list[int] = [2, 3, 5, 7]
-    confidence_threshold: float = 0.25
+    confidence_threshold: float = 0.4
     device: str = "cuda:0"
     verbose: bool = False
-    vehicle_interval: int = 1
-    plate_interval: int = 3
+    vehicle_interval: int = 2
+    plate_interval: int = 2
+    imgsz: int = 640
 
 
 class RecognitionSettings(BaseSettings):
@@ -26,9 +27,10 @@ class RecognitionSettings(BaseSettings):
     interval_ms: int = 300
     batch_size: int = 8
     min_quality_gain: float = 0.0
-    stop_confidence: float = 0.0
-    easyocr_detector: bool = True
+    stop_confidence: float = 0.7
+    easyocr_detector: bool = False
     quantize: bool = False
+    min_ocr_conf: float = 0.4
 
 
 # for paddle
@@ -40,10 +42,11 @@ class RecognitionSettings(BaseSettings):
 #     show_log: bool = False
 
 class QualitySettings(BaseSettings):
-    min_width: int = 80
-    min_height: int = 25
-    min_confidence: float = 0.6
-    blur_threshold: float = 100.0
+    min_width: int = 100
+    min_height: int = 30
+    min_confidence: float = 0.7
+    blur_threshold: float = 150.0
+    min_aspect: float = 2.0
 
 
 class TrackingSettings(BaseSettings):

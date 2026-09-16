@@ -17,7 +17,8 @@ class VehicleDetector:
         vehicle_classes: list[int] = settings.detection.vehicle_class_ids,
         conf_threshold: float = settings.detection.confidence_threshold,
         verbose: bool = settings.detection.verbose,
-        device: str = settings.detection.device
+        device: str = settings.detection.device,
+        imgsz: int = settings.detection.imgsz
     ):
         self.model = YOLO(model_path)
         self.device = resolve_device(device, settings.gpu.enabled)
@@ -31,6 +32,7 @@ class VehicleDetector:
         self.vehicle_classes = vehicle_classes
         self.conf_threshold = conf_threshold
         self.verbose = verbose
+        self.imgsz = imgsz
         log_gpu_status(f"vehicle_detector resolved={self.device} quantize={'fp16' if self.use_fp16 else 'fp32'}")
 
     def detect(self, frame):
@@ -47,6 +49,8 @@ class VehicleDetector:
             persist=True,
             verbose=self.verbose,
             device=self.device,
+            imgsz=self.imgsz,
+            tracker="bytetrack.yaml",
             **self._precision
         )
         return self._parse(results)
@@ -63,6 +67,8 @@ class VehicleDetector:
             persist=True,
             verbose=self.verbose,
             device=self.device,
+            imgsz=self.imgsz,
+            tracker="bytetrack.yaml",
             **self._precision
         )
         vehicles = []
