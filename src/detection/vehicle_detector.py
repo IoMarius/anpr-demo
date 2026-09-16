@@ -25,13 +25,13 @@ class VehicleDetector:
             self.device = "cpu"
         # Phase 18: FP16 only where CUDA actually runs; CPU stays FP32 with
         # no extra kwargs (avoids deprecated-flag warnings on CPU boxes).
-        self.half = (settings.gpu.fp16 and torch.cuda.is_available()
+        self.use_fp16 = (settings.gpu.fp16 and torch.cuda.is_available()
                      and self.device.startswith("cuda"))
-        self._precision = {"half": True} if self.half else {}
+        self._precision = {"quantize": "fp16"} if self.use_fp16 else {}
         self.vehicle_classes = vehicle_classes
         self.conf_threshold = conf_threshold
         self.verbose = verbose
-        log_gpu_status(f"vehicle_detector resolved={self.device} half={self.half}")
+        log_gpu_status(f"vehicle_detector resolved={self.device} quantize={'fp16' if self.use_fp16 else 'fp32'}")
 
     def detect(self, frame):
         if isinstance(frame, GPUFrame):
@@ -54,7 +54,7 @@ class VehicleDetector:
     def _detect_gpu(self, frame: GPUFrame):
         h, w = frame.height, frame.width
         batch, scale, pad_w, pad_h = letterbox_gpu(frame.tensor)
-        if self.half:
+        if self.use_fp16:
             batch = batch.half()
         results = self.model.track(
             batch,

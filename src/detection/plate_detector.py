@@ -18,10 +18,10 @@ class PlateDetector:
         self.device = resolve_device(device, settings.gpu.enabled)
         if self.device.startswith("cuda") and not touch_cuda(self.device):
             self.device = "cpu"
-        self.half = (settings.gpu.fp16 and torch.cuda.is_available()
+        self.use_fp16 = (settings.gpu.fp16 and torch.cuda.is_available()
                      and self.device.startswith("cuda"))
-        self._precision = {"half": True} if self.half else {}
-        log_gpu_status(f"plate_detector resolved={self.device} half={self.half}")
+        self._precision = {"quantize": "fp16"} if self.use_fp16 else {}
+        log_gpu_status(f"plate_detector resolved={self.device} quantize={'fp16' if self.use_fp16 else 'fp32'}")
 
     def detect_batch(self, crops):
         """Batched inference over vehicle crops.
@@ -63,7 +63,7 @@ class PlateDetector:
         prepped, meta = [], []
         for track_id, (x1, y1, x2, y2), crop in valid:
             batch, scale, pad_w, pad_h = letterbox_gpu(crop)
-            if self.half:
+            if self.use_fp16:
                 batch = batch.half()
             prepped.append(batch)
             meta.append((track_id, x1, y1, x2 - x1, y2 - y1,
