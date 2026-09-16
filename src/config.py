@@ -13,9 +13,10 @@ class DetectionSettings(BaseSettings):
     confidence_threshold: float = 0.3
     device: str = "cuda:0"
     verbose: bool = False
-    vehicle_interval: int = 2
-    plate_interval: int = 2
+    vehicle_interval: int = 3
+    plate_interval: int = 3
     imgsz: int = 640
+    plate_imgsz: int = 320
     use_tensorrt: bool = False
 
 
@@ -36,6 +37,7 @@ class RecognitionSettings(BaseSettings):
     upscale_target: int = 300
     upscale_max_factor: float = 4.0
     sharpen: bool = False
+    plate_format: str = "^[A-Z]{3}[0-9]{3,4}$"
 
 
 # for paddle

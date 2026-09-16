@@ -45,6 +45,8 @@ def touch_cuda(device: str) -> bool:
         return False
     try:
         torch.zeros(1, device=device)
+        # Fixed-shape inference dominates; autotune cudnn kernels once.
+        torch.backends.cudnn.benchmark = True
         return True
     except Exception as e:
         print(f"[GPU] CUDA context creation on {device} failed "

@@ -12,7 +12,7 @@ class PlateDetector:
         conf_threshold: float = settings.detection.confidence_threshold,                 
         verbose: bool = settings.detection.verbose,
         device: str = settings.detection.device,
-        imgsz: int = settings.detection.imgsz
+        imgsz: int = settings.detection.plate_imgsz
     ):
         artifact = model_path
         if settings.detection.use_tensorrt:
@@ -74,7 +74,7 @@ class PlateDetector:
     def _detect_batch_gpu(self, valid):
         prepped, meta = [], []
         for track_id, (x1, y1, x2, y2), crop in valid:
-            batch, scale, pad_w, pad_h = letterbox_gpu(crop)
+            batch, scale, pad_w, pad_h = letterbox_gpu(crop, self.imgsz)
             if self.use_fp16:
                 batch = batch.half()
             prepped.append(batch)

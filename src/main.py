@@ -112,7 +112,8 @@ def main():
                 continue
             global latest_frame
             with frame_lock:
-                latest_frame = render_frame.copy()
+                # viz is a fresh array (resize/copy/hstack); no extra copy.
+                latest_frame = render_frame
 
         if source.error:
             raise RuntimeError(source.error)
