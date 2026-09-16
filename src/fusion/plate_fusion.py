@@ -1,23 +1,38 @@
 from collections import Counter
 from typing import List, Dict, Tuple
 
+from config import settings
+
+MIN_OBS_CONF = settings.recognition.min_ocr_conf
+SINGLE_OBS_CONF = settings.recognition.stop_confidence
+
 class PlateFusion:
     @staticmethod
     def fuse(observations: List[Dict[str, float]]) -> Tuple[str, float]:
         if not observations:
             return None, 0.0
 
+        # 0. Drop low-confidence reads so one junk OCR cannot seed an event
+        confident = [obs for obs in observations
+                     if float(obs.get("conf", 0.0)) >= MIN_OBS_CONF]
+        if not confident:
+            return None, 0.0
+
         # 1. Determine the consensus string length
-        lengths = [len(obs['text']) for obs in observations]
+        lengths = [len(obs['text']) for obs in confident]
         if not lengths:
             return None, 0.0
-            
+
         target_length = Counter(lengths).most_common(1)[0][0]
-        
+
         # 2. Filter out reads that don't match the consensus length
-        valid_obs = [obs for obs in observations if len(obs['text']) == target_length]
-        
+        valid_obs = [obs for obs in confident if len(obs['text']) == target_length]
+
         if not valid_obs:
+            return None, 0.0
+
+        # 3. A lone observation needs high confidence to emit an event
+        if len(valid_obs) == 1 and float(valid_obs[0]["conf"]) < SINGLE_OBS_CONF:
             return None, 0.0
 
         fused_chars = []

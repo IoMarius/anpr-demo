@@ -6,11 +6,13 @@ class QualityGate:
     def __init__(self, min_width: int = settings.quality.min_width,
                  min_height: int = settings.quality.min_height,
                  min_conf: float = settings.quality.min_confidence,
-                 blur_threshold: float = settings.quality.blur_threshold):
+                 blur_threshold: float = settings.quality.blur_threshold,
+                 min_aspect: float = settings.quality.min_aspect):
         self.min_width = min_width
         self.min_height = min_height
         self.min_conf = min_conf
         self.blur_threshold = blur_threshold
+        self.min_aspect = min_aspect
 
     def is_valid(self, plate_bbox, confidence, frame):
         # 1. Confidence check (cheapest, first)
@@ -21,6 +23,10 @@ class QualityGate:
         x1, y1, x2, y2 = self._clip(plate_bbox, frame)
         w, h = x2 - x1, y2 - y1
         if w < self.min_width or h < self.min_height:
+            return False
+
+        # 3. Aspect check: plates are wide, reject square/noise boxes
+        if h <= 0 or (w / h) < self.min_aspect:
             return False
 
         # 3. Blur check (Laplacian variance).

@@ -28,6 +28,10 @@ class PipelineMetrics:
         self.cpu_gpu_transfers = 0
         self.plate_skipped = 0
         self.ocr_skipped = 0
+        self.vehicle_calls = 0
+        self.vehicle_skipped = 0
+        self.plate_gate_filtered = 0
+        self.ocr_rejected_low_conf = 0
         self._frame_plate_calls = 0
         self._frame_ocr_calls = 0
 
@@ -61,6 +65,18 @@ class PipelineMetrics:
     def mark_ocr_skipped(self, n: int = 1):
         self.ocr_skipped += n
 
+    def mark_vehicle_call(self, n: int = 1):
+        self.vehicle_calls += n
+
+    def mark_vehicle_skipped(self, n: int = 1):
+        self.vehicle_skipped += n
+
+    def mark_gate_filtered(self, n: int = 1):
+        self.plate_gate_filtered += n
+
+    def mark_ocr_rejected(self, n: int = 1):
+        self.ocr_rejected_low_conf += n
+
     def end_frame(self, vehicles: int):
         self.vehicles_per_frame.append(vehicles)
         self.plate_calls_per_frame.append(self._frame_plate_calls)
@@ -73,6 +89,12 @@ class PipelineMetrics:
     def _avg_ms(self, stage: str) -> float:
         vals = self._timings.get(stage, [])
         return sum(vals) / len(vals) * 1000 if vals else 0.0
+
+    def _avg_ms_per_call(self, stage: str, calls: int) -> float:
+        vals = self._timings.get(stage, [])
+        if not vals or not calls:
+            return 0.0
+        return sum(vals) / calls * 1000
 
     def _avg(self, vals: list) -> float:
         return sum(vals) / len(vals) if vals else 0.0
@@ -98,5 +120,9 @@ class PipelineMetrics:
             f"plate_calls/frame={self._avg(self.plate_calls_per_frame):.1f} "
             f"ocr_calls/frame={self._avg(self.ocr_calls_per_frame):.1f}\n"
             f"  cpu_gpu_transfers={self.cpu_gpu_transfers}\n"
-            f"  skipped plate={self.plate_skipped} ocr={self.ocr_skipped}"
+            f"  skipped plate={self.plate_skipped} ocr={self.ocr_skipped}\n"
+            f"  vehicle calls={self.vehicle_calls} skipped={self.vehicle_skipped} "
+            f"per_call={self._avg_ms_per_call('vehicle_detection', self.vehicle_calls):.0f}ms\n"
+            f"  gate_filtered={self.plate_gate_filtered} "
+            f"ocr_rejected_low_conf={self.ocr_rejected_low_conf}"
         )

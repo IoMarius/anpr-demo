@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 
 import cv2
 import numpy as np
@@ -32,6 +33,8 @@ class ANPRPipeline:
         self.fusion = fusion
         self.metrics = metrics
         self.camera_id = camera_id
+        self._frame_idx = 0
+        self._cached_vehicles: list = []
 
     def process_frame(self, frame):
         self.metrics.start("total")
@@ -62,7 +65,15 @@ class ANPRPipeline:
     def detect_vehicles(self, frame):
         self.metrics.start("vehicle_detection")
         try:
-            return self.vehicle_det.detect(frame)
+            interval = settings.detection.vehicle_interval
+            self._frame_idx += 1
+            if (interval > 1 and self._cached_vehicles
+                    and (self._frame_idx - 1) % interval != 0):
+                self.metrics.mark_vehicle_skipped()
+                return self._cached_vehicles
+            self._cached_vehicles = self.vehicle_det.detect(frame)
+            self.metrics.mark_vehicle_call()
+            return self._cached_vehicles
         finally:
             self.metrics.stop("vehicle_detection")
 
@@ -102,6 +113,8 @@ class ANPRPipeline:
                 p_bbox, p_conf = pres["bbox"], pres["conf"]
                 if self.gate.is_valid(p_bbox, p_conf, np_frame):
                     ocr_jobs.append((track_id, p_bbox, p_conf))
+                else:
+                    self.metrics.mark_gate_filtered()
         finally:
             self.metrics.stop("quality_gate")
 
@@ -129,11 +142,13 @@ class ANPRPipeline:
                     jobs, self.ocr.recognize_batch(job_crops)):
                 if text:
                     self.tracker.add_plate_observation(track_id, text,
-                                                       ocr_conf, p_bbox)
+                                                       float(ocr_conf), p_bbox)
                     self.metrics.mark_recognition()
                     px1, py1, px2, py2 = p_bbox
                     cv2.rectangle(np_frame, (px1, py1), (px2, py2),
                                   (0, 0, 255), 3)
+                else:
+                    self.metrics.mark_ocr_rejected()
         finally:
             self.metrics.stop("ocr")
 
@@ -147,9 +162,11 @@ class ANPRPipeline:
                 event = PlateEvent(
                     track_id=tid,
                     plate=fused_plate,
-                    confidence=fused_conf,
-                    first_seen=str(state.first_seen),
-                    last_seen=str(state.last_seen),
+                    confidence=float(fused_conf),
+                    first_seen=datetime.fromtimestamp(
+                        state.first_seen, tz=timezone.utc).isoformat(),
+                    last_seen=datetime.fromtimestamp(
+                        state.last_seen, tz=timezone.utc).isoformat(),
                     camera_id=self.camera_id
                 )
                 print(f"\n[EVENT] {event}\n")
